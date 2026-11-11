@@ -1,0 +1,113 @@
+# Build a Fedora / Bazzite compatible release artifact.
+#
+# The other workflows (test.yaml, release.yaml) compile inside the Debian based
+# Dockerfile. This workflow compiles inside a Fedora container instead, so the
+# binary links against the same system libraries that Fedora and Bazzite
+# (Fedora Atomic) ship, and so no host toolchain (systemd-devel, rust, ...) is
+# required to reproduce a build locally.
+#
+# NOTE: release.yaml publishes releases with the built-in GITHUB_TOKEN (no
+# secret has to be created; it is injected into every run). GitHub does not
+# start new workflow runs for events created by that token, so the
+# `release: published` trigger only fires for releases published by hand or
+# with a PAT. To attach the artifact after a semantic-release either run this
+# workflow manually with the released tag, or call it from release.yaml via the
+# `workflow_call` trigger so it runs in the same workflow run.
+name: "📦 Fedora Release"
+
+on:
+  release:
+    types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        description: "Release tag to attach the artifact to."
+        required: false
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the artifact to (e.g. v0.84.0). Leave empty to only upload the workflow artifact."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Fedora artifact
+    runs-on: ubuntu-latest
+    container:
+      # Bump when Bazzite / Fedora rebases onto a new major version.
+      image: fedora:45
+
+    steps:
+      # Package list mirrors the BuildRequires in pkg/rpm/inputplumber.spec.
+      # systemd-devel is what provides libudev.pc for libudev-sys.
+      - name: Install build dependencies
+        run: |
+          dnf install -y --setopt=install_weak_deps=False \
+            cargo \
+            clang-devel \
+            gcc \
+            gcc-c++ \
+            gh \
+            git \
+            libevdev-devel \
+            llvm-devel \
+            make \
+            pkgconf-pkg-config \
+            rust \
+            systemd-devel
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.event.release.tag_name || github.ref }}
+
+      - name: Resolve version
+        id: version
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
+          if [ -z "$version" ]; then
+            echo "Unable to read version from Cargo.toml" >&2
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Build distribution archive
+        run: make dist-archive
+
+      - name: Name artifacts
+        run: |
+          name="inputplumber-${{ steps.version.outputs.version }}-x86_64-fedora"
+          mkdir -p dist
+          mv dist/inputplumber-x86_64.tar.gz "dist/${name}.tar.gz"
+          cp target/x86_64-unknown-linux-gnu/release/inputplumber "dist/${name}"
+          cd dist
+          sha256sum "${name}.tar.gz" > "${name}.tar.gz.sha256.txt"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: inputplumber-${{ steps.version.outputs.version }}-x86_64-fedora
+          path: |
+            dist/inputplumber-${{ steps.version.outputs.version }}-x86_64-fedora
+            dist/inputplumber-${{ steps.version.outputs.version }}-x86_64-fedora.tar.gz
+            dist/inputplumber-${{ steps.version.outputs.version }}-x86_64-fedora.tar.gz.sha256.txt
+          if-no-files-found: error
+
+      - name: Attach to release
+        if: github.event_name == 'release' || inputs.tag != ''
+        env:
+          # Built-in token, injected automatically. Nothing to configure; write
+          # access comes from the `permissions: contents: write` above.
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.event.release.tag_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release upload "$TAG" \
+            "dist/inputplumber-${VERSION}-x86_64-fedora.tar.gz" \
+            "dist/inputplumber-${VERSION}-x86_64-fedora.tar.gz.sha256.txt" \
+            --clobber
