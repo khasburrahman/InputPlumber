@@ -1,3 +1,4 @@
+pub mod advan;
 pub mod dualsense;
 pub mod flydigi_vader_4_pro;
 pub mod fts3528;

@@ -1,3 +1,4 @@
+pub mod advan;
 pub mod ayaneo_haptics;
 pub mod blocked;
 pub mod dualsense;
@@ -31,6 +32,7 @@ use crate::{
 };
 
 use self::{
+    advan::Advan,
     ayaneo_haptics::AyaneoHaptics,
     blocked::BlockedHidrawDevice,
     dualsense::DualSenseController,
@@ -60,6 +62,7 @@ use super::{InputError, OutputError, SourceDeviceCompatible, SourceDriver, Sourc
 
 /// List of available drivers
 enum DriverType {
+    Advan,
     AyaneoHaptics,
     Blocked,
     DualSense,
@@ -89,6 +92,7 @@ enum DriverType {
 /// [HidRawDevice] represents an input device using the hidraw subsystem.
 #[derive(Debug)]
 pub enum HidRawDevice {
+    Advan(SourceDriver<Advan>),
     AyaneoHaptics(SourceDriver<AyaneoHaptics>),
     Blocked(SourceDriver<BlockedHidrawDevice>),
     DualSense(SourceDriver<DualSenseController>),
@@ -117,6 +121,7 @@ pub enum HidRawDevice {
 impl SourceDeviceCompatible for HidRawDevice {
     fn get_device_ref(&self) -> DeviceInfoRef<'_> {
         match self {
+            HidRawDevice::Advan(source_driver) => source_driver.info_ref(),
             HidRawDevice::AyaneoHaptics(source_driver) => source_driver.info_ref(),
             HidRawDevice::Blocked(source_driver) => source_driver.info_ref(),
             HidRawDevice::DualSense(source_driver) => source_driver.info_ref(),
@@ -145,6 +150,7 @@ impl SourceDeviceCompatible for HidRawDevice {
 
     fn get_id(&self) -> String {
         match self {
+            HidRawDevice::Advan(source_driver) => source_driver.get_id(),
             HidRawDevice::AyaneoHaptics(source_driver) => source_driver.get_id(),
             HidRawDevice::Blocked(source_driver) => source_driver.get_id(),
             HidRawDevice::DualSense(source_driver) => source_driver.get_id(),
@@ -173,6 +179,7 @@ impl SourceDeviceCompatible for HidRawDevice {
 
     fn client(&self) -> super::client::SourceDeviceClient {
         match self {
+            HidRawDevice::Advan(source_driver) => source_driver.client(),
             HidRawDevice::AyaneoHaptics(source_driver) => source_driver.client(),
             HidRawDevice::Blocked(source_driver) => source_driver.client(),
             HidRawDevice::DualSense(source_driver) => source_driver.client(),
@@ -201,6 +208,7 @@ impl SourceDeviceCompatible for HidRawDevice {
 
     async fn run(self) -> Result<(), Box<dyn Error>> {
         match self {
+            HidRawDevice::Advan(source_driver) => source_driver.run().await,
             HidRawDevice::AyaneoHaptics(source_driver) => source_driver.run().await,
             HidRawDevice::Blocked(source_driver) => source_driver.run().await,
             HidRawDevice::DualSense(source_driver) => source_driver.run().await,
@@ -229,6 +237,7 @@ impl SourceDeviceCompatible for HidRawDevice {
 
     fn get_capabilities(&self) -> Result<Vec<Capability>, InputError> {
         match self {
+            HidRawDevice::Advan(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::AyaneoHaptics(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::Blocked(source_driver) => source_driver.get_capabilities(),
             HidRawDevice::DualSense(source_driver) => source_driver.get_capabilities(),
@@ -257,6 +266,7 @@ impl SourceDeviceCompatible for HidRawDevice {
 
     fn get_output_capabilities(&self) -> Result<Vec<OutputCapability>, OutputError> {
         match self {
+            HidRawDevice::Advan(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::AyaneoHaptics(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::Blocked(source_driver) => source_driver.get_output_capabilities(),
             HidRawDevice::DualSense(source_driver) => source_driver.get_output_capabilities(),
@@ -295,6 +305,7 @@ impl SourceDeviceCompatible for HidRawDevice {
 
     fn get_device_path(&self) -> String {
         match self {
+            HidRawDevice::Advan(source_driver) => source_driver.get_device_path(),
             HidRawDevice::AyaneoHaptics(source_driver) => source_driver.get_device_path(),
             HidRawDevice::Blocked(source_driver) => source_driver.get_device_path(),
             HidRawDevice::DualSense(source_driver) => source_driver.get_device_path(),
@@ -336,6 +347,21 @@ impl HidRawDevice {
 
         match driver_type {
             DriverType::Unknown => Err("No driver for hidraw interface found".into()),
+            DriverType::Advan => {
+                let options = SourceDriverOptions {
+                    poll_rate: Duration::from_millis(0),
+                    buffer_size: 1024,
+                };
+                let device = Advan::new(device_info.clone())?;
+                let source_device = SourceDriver::new_with_options(
+                    composite_device,
+                    device,
+                    device_info.into(),
+                    options,
+                    conf,
+                );
+                Ok(Self::Advan(source_device))
+            }
             DriverType::AyaneoHaptics => {
                 let device = AyaneoHaptics::new(device_info.clone())?;
                 let source_device =
@@ -676,6 +702,12 @@ impl HidRawDevice {
         let vid = device.id_vendor();
         let pid = device.id_product();
         let iid = device.interface_number();
+
+        // ADVAN game controller vendor HID interface (QAM button)
+        if vid == drivers::advan::VID && pid == drivers::advan::PID && iid == drivers::advan::IID {
+            log::info!("Detected ADVAN game controller HID interface");
+            return DriverType::Advan;
+        }
 
         // AYANEO DirectInput controller haptics
         if vid == ayaneo_haptics::VID && pid == ayaneo_haptics::PID {
