@@ -16,6 +16,7 @@ assets = [
   { source = "rootfs/usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf", dest = "/usr/share/dbus-1/system.d/org.shadowblip.InputPlumber.conf", mode = "644" },
   { source = "rootfs/usr/share/polkit-1/actions/org.shadowblip.InputPlumber.policy", dest = "/usr/share/polkit-1/actions/org.shadowblip.InputPlumber.policy", mode = "644" },
   { source = "rootfs/usr/share/polkit-1/rules.d/org.shadowblip.InputPlumber.rules", dest = "/usr/share/polkit-1/rules.d/org.shadowblip.InputPlumber.rules", mode = "644" },
+  { source = "rootfs/usr/lib/modules-load.d/*.conf", dest = "/usr/lib/modules-load.d/", mode = "644" },
   { source = "rootfs/usr/lib/systemd/system/inputplumber.service", dest = "/usr/lib/systemd/system/inputplumber.service", mode = "644" },
   { source = "rootfs/usr/lib/systemd/system/inputplumber-suspend.service", dest = "/usr/lib/systemd/system/inputplumber-suspend.service", mode = "644" },
   { source = "rootfs/usr/share/inputplumber/devices/*.yaml", dest = "/usr/share/inputplumber/devices/", mode = "644" },

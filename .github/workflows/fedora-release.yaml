@@ -79,6 +79,17 @@ jobs:
       - name: Build distribution archive
         run: make dist-archive
 
+      # Used by rpm-ostree override replace / dnf on Fedora and Bazzite. The
+      # Make target installs cargo-generate-rpm via `cargo install`; point it at
+      # /usr/local so the `cargo generate-rpm` subcommand is on PATH.
+      - name: Build RPM package
+        env:
+          CARGO_INSTALL_ROOT: /usr/local
+        run: |
+          export PATH="/usr/local/bin:${HOME}/.cargo/bin:${PATH}"
+          make dist-rpm
+          ls -l dist/inputplumber-*.rpm
+
       - name: Name artifacts
         run: |
           name="inputplumber-${{ steps.version.outputs.version }}-x86_64-fedora"
@@ -96,6 +107,8 @@ jobs:
             dist/inputplumber-${{ steps.version.outputs.version }}-x86_64-fedora
             dist/inputplumber-${{ steps.version.outputs.version }}-x86_64-fedora.tar.gz
             dist/inputplumber-${{ steps.version.outputs.version }}-x86_64-fedora.tar.gz.sha256.txt
+            dist/inputplumber-*.rpm
+            dist/inputplumber-*.rpm.sha256.txt
           if-no-files-found: error
 
       - name: Attach to release
@@ -110,4 +123,6 @@ jobs:
           gh release upload "$TAG" \
             "dist/inputplumber-${VERSION}-x86_64-fedora.tar.gz" \
             "dist/inputplumber-${VERSION}-x86_64-fedora.tar.gz.sha256.txt" \
+            dist/inputplumber-*.rpm \
+            dist/inputplumber-*.rpm.sha256.txt \
             --clobber
