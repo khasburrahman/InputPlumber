@@ -24,11 +24,21 @@ on:
         description: "Release tag to attach the artifact to."
         required: false
         type: string
+      rpm_release:
+        description: "RPM release. Use 1 for a normal package or a high number such as 9999 for an rpm-ostree override."
+        required: false
+        default: "1"
+        type: string
   workflow_dispatch:
     inputs:
       tag:
         description: "Release tag to attach the artifact to (e.g. v0.84.0). Leave empty to only upload the workflow artifact."
         required: false
+        type: string
+      rpm_release:
+        description: "RPM release. 9999 builds an rpm-ostree override that always wins over the base package; 1 builds a normal package."
+        required: false
+        default: "9999"
         type: string
 
 permissions:
@@ -85,10 +95,14 @@ jobs:
       - name: Build RPM package
         env:
           CARGO_INSTALL_ROOT: /usr/local
+          RPM_RELEASE: ${{ inputs.rpm_release || (github.event_name == 'workflow_dispatch' && '9999') || '1' }}
         run: |
           export PATH="/usr/local/bin:${HOME}/.cargo/bin:${PATH}"
+          echo "RPM_RELEASE=${RPM_RELEASE}"
           make dist-rpm
-          ls -l dist/inputplumber-*.rpm
+          rpm -qp --qf 'RPM: %{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' dist/inputplumber-*.rpm
+          test "$(rpm -qp --qf '%{RELEASE}' dist/inputplumber-*.rpm)" = "$RPM_RELEASE"
+          echo "RPM: $(rpm -qp --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}' dist/inputplumber-*.rpm)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Name artifacts
         run: |

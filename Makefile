@@ -20,6 +20,10 @@ endif
 BUILD_TYPE ?= release
 LOG_LEVEL ?= debug
 
+# RPM release. Use a high number (e.g. 9999) to build an RPM that always wins
+# over the distro package when used with `rpm-ostree override replace`.
+RPM_RELEASE ?= 1
+
 # Docker image variables
 IMAGE_NAME ?= inputplumber-builder
 IMAGE_TAG ?= latest
@@ -164,7 +168,7 @@ example:
 ##@ Distribution
 
 .PHONY: dist
-dist: dist/$(NAME)-$(ARCH).tar.gz dist/$(NAME)_$(VERSION)-1_$(ARCH_DEB).deb dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm ## Create all redistributable versions of the project
+dist: dist/$(NAME)-$(ARCH).tar.gz dist/$(NAME)_$(VERSION)-1_$(ARCH_DEB).deb dist/$(NAME)-$(VERSION)-$(RPM_RELEASE).$(ARCH).rpm ## Create all redistributable versions of the project
 
 .PHONY: dist-archive
 dist-archive: dist/$(NAME)-$(ARCH).tar.gz ## Build a redistributable archive of the project
@@ -186,13 +190,13 @@ dist/$(NAME)_$(VERSION)-1_$(ARCH_DEB).deb: target/$(TARGET_ARCH)/release/$(NAME)
 	cd dist && sha256sum $(NAME)_$(VERSION)-1_$(ARCH_DEB).deb > $(NAME)_$(VERSION)-1_$(ARCH_DEB).deb.sha256.txt
 
 .PHONY: dist-rpm
-dist-rpm: dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm ## Build a redistributable RPM package
-dist/$(NAME)-$(VERSION)-1.$(ARCH).rpm: target/$(TARGET_ARCH)/release/$(NAME)
+dist-rpm: dist/$(NAME)-$(VERSION)-$(RPM_RELEASE).$(ARCH).rpm ## Build a redistributable RPM package
+dist/$(NAME)-$(VERSION)-$(RPM_RELEASE).$(ARCH).rpm: target/$(TARGET_ARCH)/release/$(NAME)
 	mkdir -p dist
 	cargo install --version 0.14.1 cargo-generate-rpm
-	cargo generate-rpm --target $(TARGET_ARCH)
-	cp ./target/$(TARGET_ARCH)/generate-rpm/$(NAME)-$(VERSION)-1.$(ARCH).rpm dist
-	cd dist && sha256sum $(NAME)-$(VERSION)-1.$(ARCH).rpm > $(NAME)-$(VERSION)-1.$(ARCH).rpm.sha256.txt
+	cargo generate-rpm --target $(TARGET_ARCH) $(if $(RPM_RELEASE),-s 'release = "$(RPM_RELEASE)"')
+	cp ./target/$(TARGET_ARCH)/generate-rpm/$(NAME)-$(VERSION)-$(RPM_RELEASE).$(ARCH).rpm dist
+	cd dist && sha256sum $(NAME)-$(VERSION)-$(RPM_RELEASE).$(ARCH).rpm > $(NAME)-$(VERSION)-$(RPM_RELEASE).$(ARCH).rpm.sha256.txt
 
 .PHONY: update-pkgbuild-hash
 update-pkgbuild-hash: dist/$(NAME)-$(ARCH).tar.gz ## Update the PKGBUILD hash
